@@ -1,0 +1,243 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Level {
+  CP
+  CE1
+  CE2
+  CM1
+  CM2
+}
+
+enum Period {
+  P1
+  P2
+  P3
+  P4
+  P5
+}
+
+enum PlanState {
+  DRAFT
+  CONFIRMED
+}
+
+enum ProgressState {
+  NOT_STARTED
+  PARTIAL
+  DONE
+  CANCELLED
+}
+
+enum ScheduleState {
+  ACTIVE
+  POSTPONED
+  CANCELLED
+  COMPLETED
+}
+
+enum EventType {
+  SCHEDULED
+  STATUS_CHANGED
+  POSTPONED
+  REOPENED
+  CANCELLED
+  PLAN_CONFIRMED
+  PLAN_REOPENED
+  ARCHIVED
+}
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  createdAt    DateTime    @default(now())
+  classrooms   Classroom[]
+  events       LessonEvent[]
+}
+
+model SchoolYear {
+  id          String      @id @default(cuid())
+  label       String
+  startDate   DateTime    @db.Date
+  endDate     DateTime    @db.Date
+  classrooms  Classroom[]
+  @@unique([label, startDate])
+}
+
+model Classroom {
+  id            String             @id @default(cuid())
+  ownerId       String
+  schoolYearId  String
+  name          String
+  academyCode   String
+  zoneCode      String?
+  archivedAt    DateTime?
+  createdAt     DateTime           @default(now())
+  owner         User               @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  schoolYear    SchoolYear         @relation(fields: [schoolYearId], references: [id], onDelete: Restrict)
+  levels        ClassroomLevel[]
+  days          ClassroomDay[]
+  subjects      Subject[]
+  sequences     Sequence[]
+  weeklyPlans   WeeklyPlan[]
+  exceptions    CalendarException[]
+  @@index([ownerId, archivedAt])
+}
+
+model ClassroomLevel {
+  classroomId String
+  level       Level
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  @@id([classroomId, level])
+}
+
+model ClassroomDay {
+  classroomId String
+  weekday     Int
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  @@id([classroomId, weekday])
+}
+
+model Subject {
+  id          String     @id @default(cuid())
+  classroomId String
+  name        String
+  sortOrder   Int        @default(0)
+  active      Boolean    @default(true)
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  sequences   Sequence[]
+  @@unique([classroomId, name])
+  @@index([classroomId, active, sortOrder])
+}
+
+model Sequence {
+  id            String         @id @default(cuid())
+  classroomId   String
+  subjectId     String
+  title         String
+  description   String?
+  targetPeriod  Period
+  sortOrder     Int            @default(0)
+  archivedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  classroom     Classroom     @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  subject       Subject        @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  levels        SequenceLevel[]
+  lessons       Lesson[]
+  @@index([classroomId, targetPeriod, sortOrder])
+}
+
+model SequenceLevel {
+  sequenceId      String
+  level           Level
+  optionalObjective String?
+  sequence        Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  @@id([sequenceId, level])
+}
+
+model Lesson {
+  id               String        @id @default(cuid())
+  sequenceId       String
+  title            String
+  description      String?
+  estimatedMinutes Int
+  sortOrder        Int           @default(0)
+  archivedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  sequence         Sequence      @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  levels           LessonLevel[]
+  schedules        LessonSchedule[]
+  progress         LessonProgress[]
+  events           LessonEvent[]
+  @@index([sequenceId, sortOrder])
+}
+
+model LessonLevel {
+  lessonId          String
+  level             Level
+  optionalObjective String?
+  optionalNotes     String?
+  lesson            Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  @@id([lessonId, level])
+}
+
+model WeeklyPlan {
+  id            String       @id @default(cuid())
+  classroomId   String
+  weekStartDate DateTime     @db.Date
+  state         PlanState    @default(DRAFT)
+  version       Int          @default(1)
+  confirmedAt   DateTime?
+  updatedAt     DateTime     @updatedAt
+  createdAt     DateTime     @default(now())
+  classroom     Classroom    @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  schedules     LessonSchedule[]
+  @@unique([classroomId, weekStartDate])
+}
+
+model LessonSchedule {
+  id               String        @id @default(cuid())
+  weeklyPlanId     String
+  lessonId         String
+  state            ScheduleState @default(ACTIVE)
+  scheduledAt      DateTime      @default(now())
+  closedAt         DateTime?
+  remainingMinutes Int?
+  weeklyPlan       WeeklyPlan    @relation(fields: [weeklyPlanId], references: [id], onDelete: Cascade)
+  lesson           Lesson        @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  events           LessonEvent[]
+  @@unique([weeklyPlanId, lessonId])
+  @@index([lessonId, state])
+}
+
+model LessonProgress {
+  lessonId         String
+  level            Level
+  state            ProgressState @default(NOT_STARTED)
+  completedMinutes Int?
+  notes            String?
+  updatedAt        DateTime      @updatedAt
+  lesson           Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  @@id([lessonId, level])
+}
+
+model LessonEvent {
+  id        String     @id @default(cuid())
+  lessonId  String
+  scheduleId String?
+  actorId   String
+  eventType EventType
+  payload   Json
+  createdAt DateTime   @default(now())
+  lesson    Lesson     @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  schedule  LessonSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  actor     User       @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  @@index([lessonId, createdAt])
+}
+
+model CalendarException {
+  id            String    @id @default(cuid())
+  classroomId   String
+  date          DateTime  @db.Date
+  isTeachingDay Boolean
+  reason        String?
+  classroom     Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  @@unique([classroomId, date])
+}
+
+model SchoolCalendarCache {
+  id          String   @id @default(cuid())
+  academyCode String
+  schoolYear  String
+  source      String
+  fetchedAt   DateTime @default(now())
+  payload     Json
+  @@unique([academyCode, schoolYear])
+}

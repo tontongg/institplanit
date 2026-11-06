@@ -1,0 +1,21 @@
+{
+  "name": "institplanit",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.9",
+  "scripts": {
+    "dev": "pnpm --filter @institplanit/api-contracts build && pnpm --parallel --filter './apps/*' dev",
+    "build": "pnpm --recursive build",
+    "typecheck": "pnpm --filter @institplanit/api-contracts build && pnpm --recursive typecheck",
+    "lint": "pnpm --recursive lint",
+    "test": "pnpm --recursive test",
+    "test:e2e": "pnpm --filter @institplanit/frontend test:e2e",
+    "db:generate": "pnpm --filter @institplanit/backend db:generate",
+    "db:migrate": "pnpm --filter @institplanit/backend db:migrate",
+    "db:dev": "pnpm --filter @institplanit/backend db:dev",
+    "db:seed": "pnpm --filter @institplanit/backend db:seed"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@prisma/client", "@prisma/engines", "argon2", "esbuild", "prisma"]
+  }
+}
